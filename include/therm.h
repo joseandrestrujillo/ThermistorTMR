@@ -12,23 +12,46 @@
 #define NOMINAL_TEMPERATURE 298.15    ///< Temperatura nominal (25°C en Kelvin)
 #define BETA_COEFFICIENT 3950         ///< Constante B
 
-// Estructura de configuración del termistor
+/**
+ * @brief Estructura para almacenar la configuración del termistor.
+ */
 typedef struct therm_conf_t {
-    adc_oneshot_unit_handle_t adc_hdlr; ///< Handler del ADC
-    adc_channel_t adc_channel;          ///< Canal del ADC asignado
+    adc_oneshot_unit_handle_t adc_hdlr; ///< Handler del ADC.
+    adc_channel_t adc_channel;          ///< Canal del ADC asignado.
+    float series_resistance;            ///< Resistencia de la serie (ohms).
+    float nominal_resistance;           ///< Resistencia nominal del termistor (ohms).
+    float nominal_temperature;          ///< Temperatura nominal (Kelvin).
+    float beta_coefficient;             ///< Coeficiente Beta del termistor.
+    float reference_voltage;            ///< Voltaje de referencia del ADC (V).
 } therm_t;
 
 /**
- * @brief Configura un termistor con su propio handler ADC y canal específico.
- *
- * @param[out] thermistor Puntero a la estructura del termistor.
- * @param[in] channel Canal del ADC asociado al termistor.
- * @return
- * - ESP_OK: si la configuración es exitosa.
- * - ESP_ERR_INVALID_ARG: si el puntero del termistor es nulo.
- * - Otros códigos de error relacionados con la configuración del ADC.
+ * @brief Estructura para parámetros opcionales de configuración del termistor.
  */
-esp_err_t therm_config(therm_t* thermistor, adc_channel_t channel);
+typedef struct therm_config_params_t {
+    float series_resistance;            ///< Resistencia de la serie (ohms).
+    float nominal_resistance;           ///< Resistencia nominal del termistor (ohms).
+    float nominal_temperature;          ///< Temperatura nominal (Kelvin).
+    float beta_coefficient;             ///< Coeficiente Beta del termistor.
+    float reference_voltage;            ///< Voltaje de referencia del ADC (V).
+    adc_oneshot_unit_init_cfg_t* custom_unit_cfg; ///< Configuración personalizada del ADC unit.
+    adc_oneshot_chan_cfg_t* custom_channel_cfg;   ///< Configuración personalizada del canal ADC.
+} therm_config_params_t;
+
+/**
+ * @brief Configura un termistor con parámetros opcionales o predeterminados.
+ *
+ * @param[out] thermistor Estructura del termistor a configurar.
+ * @param[in] channel Canal del ADC asociado al termistor.
+ * @param[in] params Configuración opcional de parámetros del termistor. Si es NULL, se usan valores predeterminados.
+ * @return
+ * - ESP_OK: Configuración exitosa.
+ * - ESP_ERR_INVALID_ARG: Si el puntero del termistor es nulo.
+ * - ESP_ERR_NO_MEM: No hay suficiente memoria
+ * - ESP_ERR_NOT_FOUND: El ADC ya está en uso
+ * - ESP_FAIL: La fuente de reloj no está inicializada correctamente
+ */
+esp_err_t therm_config(therm_t* thermistor, adc_channel_t channel, therm_config_params_t* params);
 
 /**
  * @brief Lee la temperatura desde el termistor.

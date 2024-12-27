@@ -77,8 +77,7 @@ SYSTEM_TASK(TASK_SENSOR)
 
 	// Configuramos el termistor con el modulo encapsulado
 	therm_t thermistor_configuration;
-	
-	ESP_ERROR_CHECK(therm_config(&thermistor_configuration, THERMISTOR_ADC_CHANNEL));
+	ESP_ERROR_CHECK(therm_config(&thermistor_configuration, THERMISTOR_ADC_CHANNEL, NULL));
 
 	// Inicializa el semásforo (la estructura del manejador se definió globalmente)
 	semSample = xSemaphoreCreateBinary();
