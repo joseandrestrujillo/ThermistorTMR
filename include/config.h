@@ -14,6 +14,8 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
+#include <stdbool.h>
+
 // freertos
 #include <freertos/FreeRTOS.h>
 #include <freertos/ringbuf.h>
@@ -34,13 +36,42 @@
 #define SYS_NAME "STF P1 System"
 enum{
 	INIT,
-    SENSOR_LOOP
+	NORMAL_MODE,
+	DEGRADED_MODE,
+	ERROR
 };
+
+// Transiciones
+
+
+#define DEVIATION_THRESHOLD_ERROR 0.2f
+#define DEVIATION_THRESHOLD_DEGRADED 0.1f
+
+static inline bool should_transition_from_normal_mode_to_error(int current_state, float deviation) {
+    return current_state == NORMAL_MODE && deviation >= DEVIATION_THRESHOLD_ERROR;
+}
+
+static inline bool should_transition_from_degraded_mode_to_error(int current_state, float deviation) {
+    return current_state == DEGRADED_MODE && deviation >= DEVIATION_THRESHOLD_ERROR;
+}
+
+static inline bool should_transition_from_normal_to_degraded_mode(int current_state, float deviation) {
+    return current_state == NORMAL_MODE && deviation > DEVIATION_THRESHOLD_DEGRADED;
+}
+
+static inline bool should_transition_from_degraded_to_normal_mode(int current_state, float deviation) {
+    return current_state == DEGRADED_MODE && deviation <= DEVIATION_THRESHOLD_DEGRADED;
+}
+
 
 // Configuración del termistor
 
 #define THERMISTOR_ADC_UNIT ADC_UNIT_1
-#define THERMISTOR_ADC_CHANNEL ADC_CHANNEL_6 // GPIO34
+#define MAIN_THERMISTOR_ADC_CHANNEL ADC_CHANNEL_6 // GPIO34
+#define REPLICA_THERMISTOR_ADC_CHANNEL ADC_CHANNEL_7 // GPIO35
+#define MAIN_THERMISTOR_ADC_CHANNEL_POWER_GPIO GPIO_NUM_33
+#define REPLICA_THERMISTOR_ADC_CHANNEL_POWER_GPIO GPIO_NUM_32
+
 #define SERIES_RESISTANCE 10000       // 10K ohms
 #define NOMINAL_RESISTANCE 10000      // 10K ohms
 #define NOMINAL_TEMPERATURE 298.15    // 25°C en Kelvin
@@ -50,16 +81,30 @@ enum{
 #define BUFFER_SIZE  2048
 #define BUFFER_TYPE  RINGBUF_TYPE_NOSPLIT
 
+typedef enum {
+	MAIN,
+	REPLICA,
+	DEVIATION
+} therm_data_source_t;
+
+typedef struct {
+    therm_data_source_t source;
+    float value;
+} therm_data_t;
+
 // Configuración de las tareas
 
 // SENSOR
 // Tarea sensor
 SYSTEM_TASK(TASK_SENSOR);
+#define CHECK_INTERVAL_CYCLES 2
 // definición de los argumentos que requiere la tarea
 typedef struct 
 {
-	RingbufHandle_t* rbuf; // puntero al buffer 
+	RingbufHandle_t* monitor_ring_buffer; // puntero al buffer del monitor 
+	RingbufHandle_t* checker_ring_buffer; // puntero al buffer del comprobador
 	uint8_t freq;          // frecuencia de muestreo
+	uint8_t check_interval_cycles;
     // ...
 }task_sensor_args_t;
 // Timeout de la tarea (ver system_task_stop)
@@ -73,12 +118,28 @@ SYSTEM_TASK(TASK_MONITOR);
 // definición de los argumentos que requiere la tarea
 typedef struct 
 {
-	RingbufHandle_t* rbuf; // puntero al buffer 
-    // ...
+	RingbufHandle_t* monitor_ring_buffer; // puntero al buffer 
+    system_t* system_state_machine;
+	system_task_t* self_task;
 }task_monitor_args_t;
 // Timeout de la tarea (ver system_task_stop)
 #define TASK_MONITOR_TIMEOUT_MS 2000 
 // Tamaño de la pila de la tarea
 #define TASK_MONITOR_STACK_SIZE 4096
+
+// COMPROBADOR
+SYSTEM_TASK(TASK_CHECKER);
+typedef struct 
+{
+	RingbufHandle_t* monitor_ring_buffer; // puntero al buffer del monitor 
+	RingbufHandle_t* checker_ring_buffer; // puntero al buffer del comprobador 
+    // ...
+}task_checker_args_t;
+
+// Timeout de la tarea (ver system_task_stop)
+#define TASK_CHECKER_TIMEOUT_MS 2000 
+// Tamaño de la pila de la tarea
+#define TASK_CHECKER_STACK_SIZE 4096
+
 
 #endif

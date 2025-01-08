@@ -1,30 +1,16 @@
 #include "config.h"
 #include "therm.h"
+#include "driver/gpio.h"  
 
 float _voltage_to_temperature(float v, const therm_t* thermistor);
 float _lsb_to_voltage(uint16_t lsb, const therm_t* thermistor);
 
 
-esp_err_t therm_config(therm_t* thermistor, adc_channel_t channel, therm_config_params_t* params) {
-    if (!thermistor) {
+esp_err_t therm_config(therm_t* thermistor, adc_channel_t channel, gpio_num_t power_gpio, therm_config_params_t* params) {
+    if (!thermistor || thermistor->adc_hdlr == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    // Configuración del ADC Unit
-    adc_oneshot_unit_init_cfg_t unit_cfg = {
-        .unit_id = THERMISTOR_ADC_UNIT,
-        .clk_src = ADC_RTC_CLK_SRC_DEFAULT,
-    };
-    if (params && params->custom_unit_cfg) {
-        unit_cfg = *(params->custom_unit_cfg);
-    }
-
-    esp_err_t err = adc_oneshot_new_unit(&unit_cfg, &thermistor->adc_hdlr);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    // Configuración del Canal del ADC
     adc_oneshot_chan_cfg_t channel_cfg = {
         .atten = ADC_ATTEN_DB_11,
         .bitwidth = ADC_BITWIDTH_12,
@@ -33,14 +19,17 @@ esp_err_t therm_config(therm_t* thermistor, adc_channel_t channel, therm_config_
         channel_cfg = *(params->custom_channel_cfg);
     }
 
-    err = adc_oneshot_config_channel(thermistor->adc_hdlr, channel, &channel_cfg);
+    esp_err_t err = adc_oneshot_config_channel(thermistor->adc_hdlr, channel, &channel_cfg);
     if (err != ESP_OK) {
         return err;
     }
 
     thermistor->adc_channel = channel;
+    thermistor->power_gpio = power_gpio;
 
-    // Configuración de parámetros opcionales
+    gpio_set_direction(thermistor->power_gpio, GPIO_MODE_OUTPUT);
+    gpio_set_level(thermistor->power_gpio, 0);
+
     thermistor->series_resistance = params && params->series_resistance ? params->series_resistance : SERIES_RESISTANCE;
     thermistor->nominal_resistance = params && params->nominal_resistance ? params->nominal_resistance : NOMINAL_RESISTANCE;
     thermistor->nominal_temperature = params && params->nominal_temperature ? params->nominal_temperature : NOMINAL_TEMPERATURE;
@@ -82,7 +71,9 @@ esp_err_t therm_read_lsb(const therm_t* thermistor, uint16_t* lsb) {
     }
 
     int raw_value = 0;
+    gpio_set_level(thermistor->power_gpio, 1);
     esp_err_t err = adc_oneshot_read(thermistor->adc_hdlr, thermistor->adc_channel, &raw_value);
+    gpio_set_level(thermistor->power_gpio, 0);
     if (err != ESP_OK) {
         return err;
     }

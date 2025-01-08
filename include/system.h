@@ -176,4 +176,6 @@ void system_task_stop(system_t *sys, system_task_t *task, uint16_t timeout_ms);
 #define SWITCH_ST_FROM_TASK(new_st)     esp_event_post_to(__task->system->sys_evt_loop, (esp_event_base_t) __task->system->sys_id, new_st, NULL, 0, portMAX_DELAY)
 #define SWITCH_ST(sys, new_st) esp_event_post_to((sys)->sys_evt_loop, (esp_event_base_t) (sys)->sys_id, new_st, NULL, 0, portMAX_DELAY)
 
+#define GET_ST_FROM_TASK() __task->system->sys_state
+
 #endif
