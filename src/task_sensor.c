@@ -71,7 +71,9 @@ SYSTEM_TASK(TASK_SENSOR)
 
 	task_sensor_args_t* ptr_args = (task_sensor_args_t*) TASK_ARGS;
 	RingbufHandle_t* voter_ring_buffer = ptr_args->voter_ring_buffer; 
+	RingbufHandle_t* checker_ring_buffer = ptr_args->checker_ring_buffer; 
 	uint8_t frequency = ptr_args->freq;
+	uint8_t check_interval_cycles = ptr_args->check_interval_cycles;
 	uint64_t period_us = 1000000 / frequency;
 
 	adc_oneshot_unit_handle_t adc_hdlr_unit_1;
@@ -116,6 +118,7 @@ SYSTEM_TASK(TASK_SENSOR)
 	void *ptr;
 	uint16_t thermistor_reads[3];
 
+	int cycles = 0;
 	// Loop
 	TASK_LOOP()
 	{
@@ -138,6 +141,20 @@ SYSTEM_TASK(TASK_SENSOR)
 				memcpy(ptr, &thermistor_reads, 3*sizeof(uint16_t));
 				xRingbufferSendComplete(*voter_ring_buffer, ptr);
 			}
+
+			if (cycles%check_interval_cycles == 0)
+			{
+				if (xRingbufferSendAcquire(*checker_ring_buffer, &ptr, 3*sizeof(uint16_t), pdMS_TO_TICKS(100)) != pdTRUE)
+				{
+					ESP_LOGI(TAG,"Buffer lleno. Espacio disponible: %d", xRingbufferGetCurFreeSize(*checker_ring_buffer));
+				}
+				else 
+				{
+					memcpy(ptr, &thermistor_reads, 3*sizeof(uint16_t));
+					xRingbufferSendComplete(*checker_ring_buffer, ptr);
+				}
+			}
+			
 		}
 		else
 		{
@@ -151,3 +168,4 @@ SYSTEM_TASK(TASK_SENSOR)
 	ESP_ERROR_CHECK(esp_timer_delete(tmrSample));
 	TASK_END();
 }
+

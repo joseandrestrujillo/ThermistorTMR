@@ -42,6 +42,12 @@
 #include <esp_event.h>
 
 // system
+typedef enum {
+    THERMISTOR_A,
+    THERMISTOR_B,
+    THERMISTOR_C,
+    THERMISTOR_NONE
+} thermistor_t;
 typedef struct
 {
 	char sys_id[16];                          // system id
@@ -51,7 +57,9 @@ typedef struct
 	uint8_t sys_nstates;                     // number of states
 	esp_event_loop_handle_t sys_evt_loop;    // system event loop handler
 	esp_event_loop_args_t sys_evt_loop_args; // system event loop configuration
+	thermistor_t degraded_thermistor;
 }system_t;
+
 
 // system tasks
 typedef struct
@@ -175,5 +183,11 @@ void system_task_stop(system_t *sys, system_task_t *task, uint16_t timeout_ms);
 // macros to switch state from a task
 #define SWITCH_ST_FROM_TASK(new_st)     esp_event_post_to(__task->system->sys_evt_loop, (esp_event_base_t) __task->system->sys_id, new_st, NULL, 0, portMAX_DELAY)
 #define SWITCH_ST(sys, new_st) esp_event_post_to((sys)->sys_evt_loop, (esp_event_base_t) (sys)->sys_id, new_st, NULL, 0, portMAX_DELAY)
+
+#define GET_ST_FROM_TASK() __task->system->sys_state
+
+#define SET_DEGRADED_THERMISTOR(degraded_therm) __task->system->degraded_thermistor = degraded_therm
+#define GET_DEGRADED_THERMISTOR() __task->system->degraded_thermistor
+
 
 #endif

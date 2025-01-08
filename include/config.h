@@ -36,8 +36,11 @@
 #define SYS_NAME "STF P1 System"
 enum{
 	INIT,
-	NORMAL_MODE
+	NORMAL_MODE,
+	DEGRADED_MODE,
+	ERROR
 };
+
 
 // Configuración de los termistores
 
@@ -68,12 +71,12 @@ SYSTEM_TASK(TASK_SENSOR);
 typedef struct 
 {
 	RingbufHandle_t* voter_ring_buffer;
+	RingbufHandle_t* checker_ring_buffer;
 	uint8_t freq;
-    // ...
+	uint8_t check_interval_cycles;
 }task_sensor_args_t;
 
 #define TASK_SENSOR_TIMEOUT_MS 2000 
-
 #define TASK_SENSOR_STACK_SIZE 4096
 
 
@@ -82,12 +85,27 @@ SYSTEM_TASK(TASK_MONITOR);
 
 typedef struct 
 {
-	RingbufHandle_t* monitor_ring_buffer;
+	RingbufHandle_t* monitor_ring_buffer; // puntero al buffer 
+    system_t* system_state_machine;
+	system_task_t* self_task;
 }task_monitor_args_t;
 
 #define TASK_MONITOR_TIMEOUT_MS 2000 
 
 #define TASK_MONITOR_STACK_SIZE 4096
+
+// COMPROBADOR
+SYSTEM_TASK(TASK_CHECKER);
+typedef struct 
+{
+	RingbufHandle_t* checker_ring_buffer;
+	uint16_t mask;
+}task_checker_args_t;
+#define CHECKER_MASK ((uint16_t)0xFF00)
+
+#define TASK_CHECKER_TIMEOUT_MS 2000 
+#define TASK_CHECKER_STACK_SIZE 4096
+
 
 // VOTADOR
 SYSTEM_TASK(TASK_VOTER);
@@ -99,11 +117,10 @@ typedef struct
 	uint16_t mask;
 }task_voter_args_t;
 
-#define MASK ((uint16_t)0xFFFC)
+#define VOTER_MASK ((uint16_t)0xFFFC)
 
 #define TASK_VOTER_TIMEOUT_MS 2000 
 
 #define TASK_VOTER_STACK_SIZE 4096
-
 
 #endif

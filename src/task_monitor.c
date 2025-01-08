@@ -52,7 +52,9 @@ SYSTEM_TASK(TASK_MONITOR)
 
 	// Recibe los argumentos de configuración de la tarea y los desempaqueta
 	task_monitor_args_t* ptr_args = (task_monitor_args_t*) TASK_ARGS;
-	RingbufHandle_t* monitor_ring_buffer = ptr_args->monitor_ring_buffer;
+	RingbufHandle_t* monitor_ring_buffer = ptr_args->monitor_ring_buffer; 
+	system_t* system_state_machine = ptr_args->system_state_machine; 
+	system_task_t* self_task = ptr_args->self_task; 
 
 	// variables para reutilizar en el bucle
 	size_t length;
@@ -61,15 +63,42 @@ SYSTEM_TASK(TASK_MONITOR)
 	// Loop
 	TASK_LOOP()
 	{
+        uint8_t current_state = GET_ST_FROM_TASK();
+
+        if(current_state == INIT)
+        {
+            vTaskDelay(100);
+            return;
+        }
+        if(current_state == ERROR)
+        {
+            ESP_LOGI(TAG, "Sensor ERROR. Repare and restart.");
+            system_task_stop(system_state_machine, self_task, TASK_SENSOR_TIMEOUT_MS);
+
+        }
+
         ptr = xRingbufferReceive(*monitor_ring_buffer, &length, pdMS_TO_TICKS(1000));
+
         if (ptr != NULL) 
         {
             uint16_t * received_data = (uint16_t *) ptr;
-
-			float v_mean = lsb_to_voltage(*received_data);
+            float v_mean = lsb_to_voltage(*received_data);
 			float t_mean = voltage_to_temperature(v_mean);
-
-            ESP_LOGI(TAG, "NORMAL_MODE: T = (%.5f) ºC", t_mean);
+            if (current_state == NORMAL_MODE) {
+                ESP_LOGI(TAG, "NORMAL_MODE: T = (%.5f) ºC", t_mean);
+            } else if (current_state == DEGRADED_MODE)
+            {
+                thermistor_t degraded_thermistor = GET_DEGRADED_THERMISTOR();
+                const char *therm_data_source_string[] = {
+                    "THERMISTOR_A",
+                    "THERMISTOR_B",
+                    "THERMISTOR_C",
+                    "NONE"
+                };
+                ESP_LOGI(TAG, "DEGRADED_MODE: T = (%.5f) ºC", t_mean);
+                ESP_LOGE(TAG, "El termistor %s debe ser cambiado", therm_data_source_string[degraded_thermistor]);
+            }
+            
             vRingbufferReturnItem(*monitor_ring_buffer, ptr);
         } 
         else 

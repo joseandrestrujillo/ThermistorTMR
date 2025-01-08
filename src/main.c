@@ -39,14 +39,20 @@ void app_main(void)
 	system_create(&sys_stf_p1, SYS_NAME);
 	system_register_state(&sys_stf_p1, INIT);
 	system_register_state(&sys_stf_p1, NORMAL_MODE);
+	system_register_state(&sys_stf_p1, DEGRADED_MODE);
+	system_register_state(&sys_stf_p1, ERROR);
 	system_set_default_state(&sys_stf_p1, INIT);
 
 	system_task_t task_sensor;
 	system_task_t task_monitor;
 	system_task_t task_voter;
+	system_task_t task_checker;
 
 	RingbufHandle_t voter_ring_buffer;
 	voter_ring_buffer = xRingbufferCreate(BUFFER_SIZE, BUFFER_TYPE);
+
+	RingbufHandle_t checker_ring_buffer;
+	checker_ring_buffer = xRingbufferCreate(BUFFER_SIZE, BUFFER_TYPE);
 
 	RingbufHandle_t monitor_ring_buffer;
 	monitor_ring_buffer = xRingbufferCreate(BUFFER_SIZE, BUFFER_TYPE);
@@ -61,6 +67,7 @@ void app_main(void)
 			STATE_BEGIN();
 			ESP_LOGI(TAG, "State: INIT");
  
+ 
             ret = nvs_flash_init();
             if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) 
             {
@@ -69,19 +76,24 @@ void app_main(void)
             }
 
             ESP_LOGI(TAG, "starting sensor task...");
-            task_sensor_args_t task_sensor_args = {&voter_ring_buffer, 1};
+            task_sensor_args_t task_sensor_args = {&voter_ring_buffer, &checker_ring_buffer, 1, CHECK_INTERVAL_CYCLES};
 			system_task_start_in_core(&sys_stf_p1, &task_sensor, TASK_SENSOR, "TASK_SENSOR", TASK_SENSOR_STACK_SIZE, &task_sensor_args, 0, CORE0);
 			ESP_LOGI(TAG, "Done");
 
 			vTaskDelay(pdMS_TO_TICKS(1000));
 
 			ESP_LOGI(TAG, "starting voter task...");
-			task_voter_args_t task_voter_args = {&voter_ring_buffer, &monitor_ring_buffer, MASK};
+			task_voter_args_t task_voter_args = {&voter_ring_buffer, &monitor_ring_buffer, VOTER_MASK};
 			system_task_start_in_core(&sys_stf_p1, &task_voter, TASK_VOTER, "TASK_VOTER", TASK_VOTER_STACK_SIZE, &task_voter_args, 0, CORE1);
 			ESP_LOGI(TAG, "Done");
 
+			ESP_LOGI(TAG, "starting checker task...");
+			task_checker_args_t task_checker_args = {&checker_ring_buffer, CHECKER_MASK};
+			system_task_start_in_core(&sys_stf_p1, &task_checker, TASK_CHECKER, "TASK_CHECKER", TASK_CHECKER_STACK_SIZE, &task_checker_args, 0, CORE1);
+			ESP_LOGI(TAG, "Done");
+
 			ESP_LOGI(TAG, "starting monitor task...");
-			task_monitor_args_t task_monitor_args = {&monitor_ring_buffer};
+			task_monitor_args_t task_monitor_args = {&monitor_ring_buffer, &sys_stf_p1, &task_monitor};
 			system_task_start_in_core(&sys_stf_p1, &task_monitor, TASK_MONITOR, "TASK_MONITOR", TASK_MONITOR_STACK_SIZE, &task_monitor_args, 0, CORE1);
 			ESP_LOGI(TAG, "Done");
 
@@ -91,7 +103,19 @@ void app_main(void)
 		STATE(NORMAL_MODE)
 		{
 			STATE_BEGIN();
-			ESP_LOGI(TAG, "State: NORMAL_MODE");
+			STATE_END();
+		}
+		STATE(DEGRADED_MODE)
+		{
+			STATE_BEGIN();
+			STATE_END();
+		}
+		STATE(ERROR)
+		{
+			STATE_BEGIN();
+			system_task_stop(&sys_stf_p1, &task_sensor, TASK_SENSOR_TIMEOUT_MS);
+			system_task_stop(&sys_stf_p1, &task_voter, TASK_VOTER_TIMEOUT_MS);
+			system_task_stop(&sys_stf_p1, &task_checker, TASK_CHECKER_TIMEOUT_MS);
 			STATE_END();
 		}
 		STATE_MACHINE_END();
