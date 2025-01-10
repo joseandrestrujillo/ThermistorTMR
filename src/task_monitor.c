@@ -31,12 +31,6 @@
 
 static const char *TAG = "STF_P1:task_monitor";
 
-const char *therm_data_source_string[] = {
-    "THERMISTOR_A",
-    "THERMISTOR_B",
-    "THERMISTOR_C"
-};
-
 // Tarea MONITOR
 SYSTEM_TASK(TASK_MONITOR)
 {
@@ -59,7 +53,7 @@ SYSTEM_TASK(TASK_MONITOR)
         if (ptr != NULL) 
         {
             therm_data_t *received_data = (therm_data_t *) ptr;
-            ESP_LOGI(TAG, "NORMAL_MODE: %s T = (%.5f) ºC", therm_data_source_string[received_data->source], received_data->value);
+            ESP_LOGI(TAG, "NORMAL_MODE: T = (%.5f) ºC", received_data->value);
             vRingbufferReturnItem(*monitor_ring_buffer, ptr);
         } 
         else 

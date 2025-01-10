@@ -70,7 +70,7 @@ SYSTEM_TASK(TASK_SENSOR)
 	ESP_LOGI(TAG,"Task Sensor running");
 
 	task_sensor_args_t* ptr_args = (task_sensor_args_t*) TASK_ARGS;
-	RingbufHandle_t* monitor_ring_buffer = ptr_args->monitor_ring_buffer; 
+	RingbufHandle_t* voter_ring_buffer = ptr_args->voter_ring_buffer; 
 	uint8_t frequency = ptr_args->freq;
 	uint64_t period_us = 1000000 / frequency;
 
@@ -134,14 +134,14 @@ SYSTEM_TASK(TASK_SENSOR)
 
 			for (uint8_t i = 0; i < 3; i++)
 			{
-				if (xRingbufferSendAcquire(*monitor_ring_buffer, &ptr, sizeof(thermistors[i]), pdMS_TO_TICKS(100)) != pdTRUE)
+				if (xRingbufferSendAcquire(*voter_ring_buffer, &ptr, sizeof(thermistors[i]), pdMS_TO_TICKS(100)) != pdTRUE)
 				{
-					ESP_LOGI(TAG,"Buffer lleno. Espacio disponible: %d", xRingbufferGetCurFreeSize(*monitor_ring_buffer));
+					ESP_LOGI(TAG,"Buffer lleno. Espacio disponible: %d", xRingbufferGetCurFreeSize(*voter_ring_buffer));
 				}
 				else 
 				{
 					memcpy(ptr, &thermistors[i], sizeof(thermistors[i]));
-					xRingbufferSendComplete(*monitor_ring_buffer, ptr);
+					xRingbufferSendComplete(*voter_ring_buffer, ptr);
 				}
 			}
 		}

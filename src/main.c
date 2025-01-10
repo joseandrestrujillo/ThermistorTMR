@@ -43,6 +43,10 @@ void app_main(void)
 
 	system_task_t task_sensor;
 	system_task_t task_monitor;
+	system_task_t task_voter;
+
+	RingbufHandle_t voter_ring_buffer;
+	voter_ring_buffer = xRingbufferCreate(BUFFER_SIZE, BUFFER_TYPE);
 
 	RingbufHandle_t monitor_ring_buffer;
 	monitor_ring_buffer = xRingbufferCreate(BUFFER_SIZE, BUFFER_TYPE);
@@ -65,14 +69,19 @@ void app_main(void)
             }
 
             ESP_LOGI(TAG, "starting sensor task...");
-            task_sensor_args_t task_sensor_args = {&monitor_ring_buffer, 1};
+            task_sensor_args_t task_sensor_args = {&voter_ring_buffer, 1};
 			system_task_start_in_core(&sys_stf_p1, &task_sensor, TASK_SENSOR, "TASK_SENSOR", TASK_SENSOR_STACK_SIZE, &task_sensor_args, 0, CORE0);
 			ESP_LOGI(TAG, "Done");
 
 			vTaskDelay(pdMS_TO_TICKS(1000));
 
+			ESP_LOGI(TAG, "starting voter task...");
+			task_voter_args_t task_voter_args = {&voter_ring_buffer, &monitor_ring_buffer};
+			system_task_start_in_core(&sys_stf_p1, &task_voter, TASK_VOTER, "TASK_VOTER", TASK_VOTER_STACK_SIZE, &task_voter_args, 0, CORE1);
+			ESP_LOGI(TAG, "Done");
+
 			ESP_LOGI(TAG, "starting monitor task...");
-			task_monitor_args_t task_monitor_args = {&monitor_ring_buffer, &sys_stf_p1, &task_monitor};
+			task_monitor_args_t task_monitor_args = {&monitor_ring_buffer};
 			system_task_start_in_core(&sys_stf_p1, &task_monitor, TASK_MONITOR, "TASK_MONITOR", TASK_MONITOR_STACK_SIZE, &task_monitor_args, 0, CORE1);
 			ESP_LOGI(TAG, "Done");
 

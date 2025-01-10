@@ -64,7 +64,8 @@ enum{
 typedef enum {
 	THERMISTOR_A,
 	THERMISTOR_B,
-	THERMISTOR_C
+	THERMISTOR_C,
+	VOTER
 } therm_data_source_t;
 
 typedef struct {
@@ -72,34 +73,45 @@ typedef struct {
     float value;
 } therm_data_t;
 
-// Configuración de las tareas
-
 // SENSOR
-// Tarea sensor
 SYSTEM_TASK(TASK_SENSOR);
 #define CHECK_INTERVAL_CYCLES 2
-// definición de los argumentos que requiere la tarea
 typedef struct 
 {
-	RingbufHandle_t* monitor_ring_buffer; // puntero al buffer del monitor 
-	uint8_t freq;          // frecuencia de muestreo
+	RingbufHandle_t* voter_ring_buffer;
+	uint8_t freq;
     // ...
 }task_sensor_args_t;
-// Timeout de la tarea (ver system_task_stop)
+
 #define TASK_SENSOR_TIMEOUT_MS 2000 
-// Tamaño de la pila de la tarea
+
 #define TASK_SENSOR_STACK_SIZE 4096
 
 
 // MONITOR
 SYSTEM_TASK(TASK_MONITOR);
-// definición de los argumentos que requiere la tarea
+
 typedef struct 
 {
-	RingbufHandle_t* monitor_ring_buffer; // puntero al buffer 
+	RingbufHandle_t* monitor_ring_buffer;
 }task_monitor_args_t;
-// Timeout de la tarea (ver system_task_stop)
+
 #define TASK_MONITOR_TIMEOUT_MS 2000 
-// Tamaño de la pila de la tarea
+
 #define TASK_MONITOR_STACK_SIZE 4096
+
+// VOTADOR
+SYSTEM_TASK(TASK_VOTER);
+
+typedef struct 
+{
+	RingbufHandle_t* voter_ring_buffer;
+	RingbufHandle_t* monitor_ring_buffer;
+}task_voter_args_t;
+
+#define TASK_VOTER_TIMEOUT_MS 2000 
+
+#define TASK_VOTER_STACK_SIZE 4096
+
+
 #endif
