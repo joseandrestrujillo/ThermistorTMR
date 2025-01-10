@@ -15,6 +15,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <sys/time.h>
+#include <math.h>
 
 // freerqtos
 #include <freertos/FreeRTOS.h>
@@ -30,6 +31,18 @@
 #include "config.h"
 
 static const char *TAG = "STF_P1:task_monitor";
+
+float voltage_to_temperature(float v) {
+    float r_ntc = SERIES_RESISTANCE * (3.3f - v) / v;
+
+    float t_kelvin = 1.0f / (1.0f / NOMINAL_TEMPERATURE + (1.0f / BETA_COEFFICIENT) * log(r_ntc / NOMINAL_RESISTANCE));
+    
+    return t_kelvin - 273.15f;
+}
+
+float lsb_to_voltage(uint16_t lsb) {
+    return (float) ((lsb) * 3.3f / 4095.0f);
+}
 
 // Tarea MONITOR
 SYSTEM_TASK(TASK_MONITOR)
@@ -49,11 +62,14 @@ SYSTEM_TASK(TASK_MONITOR)
 	TASK_LOOP()
 	{
         ptr = xRingbufferReceive(*monitor_ring_buffer, &length, pdMS_TO_TICKS(1000));
-
         if (ptr != NULL) 
         {
-            therm_data_t *received_data = (therm_data_t *) ptr;
-            ESP_LOGI(TAG, "NORMAL_MODE: T = (%.5f) ºC", received_data->value);
+            uint16_t * received_data = (uint16_t *) ptr;
+
+			float v_mean = lsb_to_voltage(*received_data);
+			float t_mean = voltage_to_temperature(v_mean);
+
+            ESP_LOGI(TAG, "NORMAL_MODE: T = (%.5f) ºC", t_mean);
             vRingbufferReturnItem(*monitor_ring_buffer, ptr);
         } 
         else 

@@ -61,17 +61,6 @@ enum{
 #define BUFFER_SIZE  2048
 #define BUFFER_TYPE  RINGBUF_TYPE_NOSPLIT
 
-typedef enum {
-	THERMISTOR_A,
-	THERMISTOR_B,
-	THERMISTOR_C,
-	VOTER
-} therm_data_source_t;
-
-typedef struct {
-    therm_data_source_t source;
-    float value;
-} therm_data_t;
 
 // SENSOR
 SYSTEM_TASK(TASK_SENSOR);
@@ -107,7 +96,10 @@ typedef struct
 {
 	RingbufHandle_t* voter_ring_buffer;
 	RingbufHandle_t* monitor_ring_buffer;
+	uint16_t mask;
 }task_voter_args_t;
+
+#define MASK ((uint16_t)0xFFFC)
 
 #define TASK_VOTER_TIMEOUT_MS 2000 
 

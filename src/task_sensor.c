@@ -114,10 +114,7 @@ SYSTEM_TASK(TASK_SENSOR)
 	
 	// variables para reutilizar en el bucle
 	void *ptr;
-	therm_data_t thermistors[3];
-	thermistors[0].source = THERMISTOR_A;
-	thermistors[1].source = THERMISTOR_B;
-	thermistors[2].source = THERMISTOR_C;
+	uint16_t thermistor_reads[3];
 
 	// Loop
 	TASK_LOOP()
@@ -127,22 +124,19 @@ SYSTEM_TASK(TASK_SENSOR)
 		// en tareas periódicas cuyo periodo es conocido. 
 		if(xSemaphoreTake(semSample, ((1000/frequency)*1.2)/portTICK_PERIOD_MS))
 		{
-			ESP_ERROR_CHECK(therm_read_t(&thermistor_a, &thermistors[0].value));
-			ESP_ERROR_CHECK(therm_read_t(&thermistor_b, &thermistors[1].value));
-			ESP_ERROR_CHECK(therm_read_t(&thermistor_c, &thermistors[2].value));
+			ESP_ERROR_CHECK(therm_read_lsb(&thermistor_a, &thermistor_reads[0]));
+			ESP_ERROR_CHECK(therm_read_lsb(&thermistor_b, &thermistor_reads[1]));
+			ESP_ERROR_CHECK(therm_read_lsb(&thermistor_c, &thermistor_reads[2]));
 
 
-			for (uint8_t i = 0; i < 3; i++)
+			if (xRingbufferSendAcquire(*voter_ring_buffer, &ptr, 3*sizeof(uint16_t), pdMS_TO_TICKS(100)) != pdTRUE)
 			{
-				if (xRingbufferSendAcquire(*voter_ring_buffer, &ptr, sizeof(thermistors[i]), pdMS_TO_TICKS(100)) != pdTRUE)
-				{
-					ESP_LOGI(TAG,"Buffer lleno. Espacio disponible: %d", xRingbufferGetCurFreeSize(*voter_ring_buffer));
-				}
-				else 
-				{
-					memcpy(ptr, &thermistors[i], sizeof(thermistors[i]));
-					xRingbufferSendComplete(*voter_ring_buffer, ptr);
-				}
+				ESP_LOGI(TAG,"Buffer lleno. Espacio disponible: %d", xRingbufferGetCurFreeSize(*voter_ring_buffer));
+			}
+			else 
+			{
+				memcpy(ptr, &thermistor_reads, 3*sizeof(uint16_t));
+				xRingbufferSendComplete(*voter_ring_buffer, ptr);
 			}
 		}
 		else

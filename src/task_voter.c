@@ -32,7 +32,6 @@
 
 static const char *TAG = "STF_P1:task_voter";
 
-
 // Tarea Votador
 SYSTEM_TASK(TASK_VOTER)
 {
@@ -43,14 +42,13 @@ SYSTEM_TASK(TASK_VOTER)
 	task_voter_args_t* ptr_args = (task_voter_args_t*) TASK_ARGS;
 	RingbufHandle_t* voter_ring_buffer = ptr_args->voter_ring_buffer; 
 	RingbufHandle_t* monitor_ring_buffer = ptr_args->monitor_ring_buffer; 
+	uint16_t mask = ptr_args->mask; 
 
 	// variables para reutilizar en el bucle
 	size_t length;
 	void *ptr;
-	therm_data_t thermistor_a_data, thermistor_b_data, thermistor_c_data;
-	bool thermistor_a_received = false;
-	bool thermistor_b_received = false;
-	bool thermistor_c_received = false;
+
+	uint16_t * thermistor_reads;
 
 	// Loop
 	TASK_LOOP()
@@ -59,46 +57,29 @@ SYSTEM_TASK(TASK_VOTER)
 
 		if (ptr != NULL) 
 		{
-			therm_data_t *received_data = (therm_data_t *) ptr;
-			if (received_data->source == THERMISTOR_A) {
-				thermistor_a_data = *received_data;
-				thermistor_a_received = true;
-			} else if (received_data->source == THERMISTOR_B) {
-				thermistor_b_data = *received_data;
-				thermistor_b_received = true;
-			} else if (received_data->source == THERMISTOR_C) {
-                thermistor_c_data = *received_data;
-				thermistor_c_received = true;
-            }
-            
+			thermistor_reads = (uint16_t *) ptr;
 			vRingbufferReturnItem(*voter_ring_buffer, ptr);
-		} 
-		else 
-		{
-			ESP_LOGW(TAG, "Esperando datos ...");
-		}
 
-		if (thermistor_a_received && thermistor_b_received && thermistor_c_received) {
-            float mean = (thermistor_a_data.value + thermistor_b_data.value + thermistor_c_data.value)/3;
+			uint16_t a = thermistor_reads[0] & mask;
+			uint16_t b = thermistor_reads[1] & mask;
+			uint16_t c = thermistor_reads[2] & mask;
 
-			therm_data_t mean_data;
-			mean_data.source = VOTER;
-			mean_data.value = mean;
+			uint16_t lsb_mean = (a & b) | (a & c) | (b & c);
 
-			if (xRingbufferSendAcquire(*monitor_ring_buffer, &ptr, sizeof(mean_data), pdMS_TO_TICKS(100)) != pdTRUE)
+			if (xRingbufferSendAcquire(*monitor_ring_buffer, &ptr, sizeof(uint16_t), pdMS_TO_TICKS(100)) != pdTRUE)
 			{
 				ESP_LOGI(TAG,"Buffer lleno. Espacio disponible: %d", xRingbufferGetCurFreeSize(*monitor_ring_buffer));
 			}
 			else 
 			{
-				memcpy(ptr, &mean_data, sizeof(mean_data));
+				memcpy(ptr, &lsb_mean, sizeof(uint16_t));
 				xRingbufferSendComplete(*monitor_ring_buffer, ptr);
 
 			}
-
-			thermistor_a_received = false;
-			thermistor_b_received = false;
-			thermistor_c_received = false;
+		} 
+		else 
+		{
+			ESP_LOGW(TAG, "Esperando datos ...");
 		}
 	}
 	ESP_LOGI(TAG,"Deteniendo la tarea ...");

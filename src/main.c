@@ -76,7 +76,7 @@ void app_main(void)
 			vTaskDelay(pdMS_TO_TICKS(1000));
 
 			ESP_LOGI(TAG, "starting voter task...");
-			task_voter_args_t task_voter_args = {&voter_ring_buffer, &monitor_ring_buffer};
+			task_voter_args_t task_voter_args = {&voter_ring_buffer, &monitor_ring_buffer, MASK};
 			system_task_start_in_core(&sys_stf_p1, &task_voter, TASK_VOTER, "TASK_VOTER", TASK_VOTER_STACK_SIZE, &task_voter_args, 0, CORE1);
 			ESP_LOGI(TAG, "Done");
 
