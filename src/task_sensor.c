@@ -69,31 +69,34 @@ SYSTEM_TASK(TASK_SENSOR)
 	TASK_BEGIN();
 	ESP_LOGI(TAG,"Task Sensor running");
 
-	// Recibe los argumentos de configuración de la tarea y los desempaqueta
 	task_sensor_args_t* ptr_args = (task_sensor_args_t*) TASK_ARGS;
 	RingbufHandle_t* monitor_ring_buffer = ptr_args->monitor_ring_buffer; 
-	RingbufHandle_t* checker_ring_buffer = ptr_args->checker_ring_buffer; 
 	uint8_t frequency = ptr_args->freq;
-	uint8_t check_interval_cycles = ptr_args->check_interval_cycles;
 	uint64_t period_us = 1000000 / frequency;
 
-	// Configuramos ambos termistores
-	adc_oneshot_unit_handle_t adc_hdlr;
-	adc_oneshot_unit_init_cfg_t adc1_default_cfg = {
+	adc_oneshot_unit_handle_t adc_hdlr_unit_1;
+	adc_oneshot_unit_init_cfg_t adc_unit_1_default_cfg = {
 		.unit_id = ADC_UNIT_1,
 		.clk_src = ADC_RTC_CLK_SRC_DEFAULT,
 	};
 
-	// Inicializar el manejador ADC
-	ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc1_default_cfg, &adc_hdlr));
+	ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc_unit_1_default_cfg, &adc_hdlr_unit_1));
 
-	// Inicializar los termistores con el manejador
-	therm_t main_thermistor = { .adc_hdlr = adc_hdlr };
-	therm_t replica_thermistor = { .adc_hdlr = adc_hdlr };
+	adc_oneshot_unit_handle_t adc_hdlr_unit_2;
+	adc_oneshot_unit_init_cfg_t adc_unit_2_default_cfg = {
+		.unit_id = ADC_UNIT_2,
+		.clk_src = ADC_RTC_CLK_SRC_DEFAULT,
+	};
 
-	// Configurar los termistores
-	ESP_ERROR_CHECK(therm_config(&main_thermistor, MAIN_THERMISTOR_ADC_CHANNEL, MAIN_THERMISTOR_ADC_CHANNEL_POWER_GPIO, NULL));
-	ESP_ERROR_CHECK(therm_config(&replica_thermistor, REPLICA_THERMISTOR_ADC_CHANNEL, REPLICA_THERMISTOR_ADC_CHANNEL_POWER_GPIO, NULL));
+	ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc_unit_2_default_cfg, &adc_hdlr_unit_2));
+
+	therm_t thermistor_a = { .adc_hdlr = adc_hdlr_unit_1 };
+	therm_t thermistor_b = { .adc_hdlr = adc_hdlr_unit_1 };
+	therm_t thermistor_c = { .adc_hdlr = adc_hdlr_unit_2 };
+
+	ESP_ERROR_CHECK(therm_config(&thermistor_a, THERMISTOR_A_ADC_CHANNEL, THERMISTOR_A_ADC_CHANNEL_POWER_GPIO, NULL));
+	ESP_ERROR_CHECK(therm_config(&thermistor_b, THERMISTOR_B_ADC_CHANNEL, THERMISTOR_B_ADC_CHANNEL_POWER_GPIO, NULL));
+	ESP_ERROR_CHECK(therm_config(&thermistor_c, THERMISTOR_C_ADC_CHANNEL, THERMISTOR_C_ADC_CHANNEL_POWER_GPIO, NULL));
 
 	// Inicializa el semásforo (la estructura del manejador se definió globalmente)
 	semSample = xSemaphoreCreateBinary();
@@ -111,11 +114,11 @@ SYSTEM_TASK(TASK_SENSOR)
 	
 	// variables para reutilizar en el bucle
 	void *ptr;
-	therm_data_t main_data, replica_data;
-	main_data.source = MAIN;
-	replica_data.source = REPLICA;
+	therm_data_t thermistors[3];
+	thermistors[0].source = THERMISTOR_A;
+	thermistors[1].source = THERMISTOR_B;
+	thermistors[2].source = THERMISTOR_C;
 
-	int cycles = 0;
 	// Loop
 	TASK_LOOP()
 	{
@@ -123,48 +126,23 @@ SYSTEM_TASK(TASK_SENSOR)
 		// el sistema se reinicia por seguridad. Este mecanismo de watchdog software es útil
 		// en tareas periódicas cuyo periodo es conocido. 
 		if(xSemaphoreTake(semSample, ((1000/frequency)*1.2)/portTICK_PERIOD_MS))
-		{	
-			/* ---------------------------------------------------------------------------------------------
-			*	Lectura del termistor PRINCIPAL
-			* ---------------------------------------------------------------------------------------------
-			*/
-			ESP_ERROR_CHECK(therm_read_t(&main_thermistor, &main_data.value));
- 
-			if (xRingbufferSendAcquire(*monitor_ring_buffer, &ptr, sizeof(main_data), pdMS_TO_TICKS(100)) != pdTRUE)
-			{
-				ESP_LOGI(TAG,"Buffer lleno. Espacio disponible: %d", xRingbufferGetCurFreeSize(*monitor_ring_buffer));
-			}
-			else 
-			{
-				memcpy(ptr, &main_data, sizeof(main_data));
-				xRingbufferSendComplete(*monitor_ring_buffer, ptr);
-			}
+		{
+			ESP_ERROR_CHECK(therm_read_t(&thermistor_a, &thermistors[0].value));
+			ESP_ERROR_CHECK(therm_read_t(&thermistor_b, &thermistors[1].value));
+			ESP_ERROR_CHECK(therm_read_t(&thermistor_c, &thermistors[2].value));
 
-			if (cycles%check_interval_cycles != 0) return;			
 
-			/* ---------------------------------------------------------------------------------------------
-			*	Lectura del termistor REPLICA
-			* ---------------------------------------------------------------------------------------------
-			*/
-			ESP_ERROR_CHECK(therm_read_t(&replica_thermistor, &replica_data.value));
-
-			if (xRingbufferSendAcquire(*checker_ring_buffer, &ptr, (sizeof(main_data)), pdMS_TO_TICKS(100)) != pdTRUE)
+			for (uint8_t i = 0; i < 3; i++)
 			{
-				ESP_LOGI(TAG,"Buffer lleno. Espacio disponible: %d", xRingbufferGetCurFreeSize(*checker_ring_buffer));
-			}
-			else 
-			{
-				memcpy(ptr, &main_data, sizeof(main_data));
-				xRingbufferSendComplete(*checker_ring_buffer, ptr);
-			}
-			if (xRingbufferSendAcquire(*checker_ring_buffer, &ptr, (sizeof(replica_data)), pdMS_TO_TICKS(100)) != pdTRUE)
-			{
-				ESP_LOGI(TAG,"Buffer lleno. Espacio disponible: %d", xRingbufferGetCurFreeSize(*checker_ring_buffer));
-			}
-			else 
-			{
-				memcpy(ptr, &replica_data, sizeof(replica_data));
-				xRingbufferSendComplete(*checker_ring_buffer, ptr);
+				if (xRingbufferSendAcquire(*monitor_ring_buffer, &ptr, sizeof(thermistors[i]), pdMS_TO_TICKS(100)) != pdTRUE)
+				{
+					ESP_LOGI(TAG,"Buffer lleno. Espacio disponible: %d", xRingbufferGetCurFreeSize(*monitor_ring_buffer));
+				}
+				else 
+				{
+					memcpy(ptr, &thermistors[i], sizeof(thermistors[i]));
+					xRingbufferSendComplete(*monitor_ring_buffer, ptr);
+				}
 			}
 		}
 		else
@@ -175,7 +153,6 @@ SYSTEM_TASK(TASK_SENSOR)
 	}
 	
 	ESP_LOGI(TAG,"Deteniendo la tarea...");
-	// detención controlada de las estructuras que ha levantado la tarea
 	ESP_ERROR_CHECK(esp_timer_stop(tmrSample));
 	ESP_ERROR_CHECK(esp_timer_delete(tmrSample));
 	TASK_END();

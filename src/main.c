@@ -32,7 +32,6 @@
 
 static const char *TAG = "STF_P1:main";
 
-// Punto de entrada
 void app_main(void)
 {
 	system_t sys_stf_p1;
@@ -40,29 +39,14 @@ void app_main(void)
 	system_create(&sys_stf_p1, SYS_NAME);
 	system_register_state(&sys_stf_p1, INIT);
 	system_register_state(&sys_stf_p1, NORMAL_MODE);
-	system_register_state(&sys_stf_p1, DEGRADED_MODE);
-	system_register_state(&sys_stf_p1, ERROR);
 	system_set_default_state(&sys_stf_p1, INIT);
 
-
-	// Define manejadores de tareas (de momento sin asignar)
 	system_task_t task_sensor;
 	system_task_t task_monitor;
-	system_task_t task_checker;
 
-	// Define y crea un buffer cíclico (ver documentación de ESP-IDF)
-	// a modo de buffer thread-safe entre tareas. 
-
-	// Buffer cíclico para el monitor
 	RingbufHandle_t monitor_ring_buffer;
 	monitor_ring_buffer = xRingbufferCreate(BUFFER_SIZE, BUFFER_TYPE);
 
-
-	// Buffer cíclico para el comprobador
-	RingbufHandle_t checker_ring_buffer;
-	checker_ring_buffer = xRingbufferCreate(BUFFER_SIZE, BUFFER_TYPE);
-
-	// variable para códigos de retorno 
 	esp_err_t ret;
 
 	STATE_MACHINE(sys_stf_p1) 
@@ -80,27 +64,16 @@ void app_main(void)
                 ESP_ERROR_CHECK(nvs_flash_init());
             }
 
-			// Crea la tarea sensor como un proceso asociado al CORE 0. 
-			// Lo que hace la tarea está en task_sensor.h
             ESP_LOGI(TAG, "starting sensor task...");
-            task_sensor_args_t task_sensor_args = {&monitor_ring_buffer, &checker_ring_buffer, 1, CHECK_INTERVAL_CYCLES};
+            task_sensor_args_t task_sensor_args = {&monitor_ring_buffer, 1};
 			system_task_start_in_core(&sys_stf_p1, &task_sensor, TASK_SENSOR, "TASK_SENSOR", TASK_SENSOR_STACK_SIZE, &task_sensor_args, 0, CORE0);
 			ESP_LOGI(TAG, "Done");
 
-			// Delay
 			vTaskDelay(pdMS_TO_TICKS(1000));
 
-			// Crea la tarea monitor como un proceso asociado al CORE 1.
-			// Lo que hace la tarea está en task_monitor.c
 			ESP_LOGI(TAG, "starting monitor task...");
 			task_monitor_args_t task_monitor_args = {&monitor_ring_buffer, &sys_stf_p1, &task_monitor};
 			system_task_start_in_core(&sys_stf_p1, &task_monitor, TASK_MONITOR, "TASK_MONITOR", TASK_MONITOR_STACK_SIZE, &task_monitor_args, 0, CORE1);
-			ESP_LOGI(TAG, "Done");
-
-			// Tarea Comprobador
-			ESP_LOGI(TAG, "starting checker task...");
-			task_checker_args_t task_checker_args = {&monitor_ring_buffer, &checker_ring_buffer};
-			system_task_start_in_core(&sys_stf_p1, &task_checker, TASK_CHECKER, "TASK_CHECKER", TASK_CHECKER_STACK_SIZE, &task_checker_args, 0, CORE1);
 			ESP_LOGI(TAG, "Done");
 
 			SWITCH_ST(&sys_stf_p1, NORMAL_MODE);
@@ -110,20 +83,6 @@ void app_main(void)
 		{
 			STATE_BEGIN();
 			ESP_LOGI(TAG, "State: NORMAL_MODE");
-			STATE_END();
-		}
-		STATE(DEGRADED_MODE)
-		{
-			STATE_BEGIN();
-			ESP_LOGI(TAG, "State: DEGRADED_MODE");
-			STATE_END();
-		}
-		STATE(ERROR)
-		{
-			STATE_BEGIN();
-			system_task_stop(&sys_stf_p1, &task_sensor, TASK_SENSOR_TIMEOUT_MS);
-			system_task_stop(&sys_stf_p1, &task_checker, TASK_CHECKER_TIMEOUT_MS);
-			ESP_LOGI(TAG, "State: ERROR");
 			STATE_END();
 		}
 		STATE_MACHINE_END();
